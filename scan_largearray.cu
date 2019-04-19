@@ -196,14 +196,16 @@ runTest( int argc, char** argv)
 
     // Run just once to remove startup overhead for more accurate performance 
     // measurement
-    hostPrescanArray(d_odata, d_idata, 16);
+    dim3 grid(16);
+    dim3 block(256); 
+    hostPrescanArray<<<grid, block>>>(d_odata, d_idata, 16);
 
     // Run the prescan
     CUT_SAFE_CALL(cutCreateTimer(&timer));
     cutStartTimer(timer);
     
     // **===-------- Lab4: Modify the body of this function -----------===**
-    hostPrescanArray(d_odata, d_idata, num_elements);
+    hostPrescanArray<<<grid, block>>>(d_odata, d_idata, num_elements);
     // **===-----------------------------------------------------------===**
     CUDA_SAFE_CALL( cudaThreadSynchronize() );
 

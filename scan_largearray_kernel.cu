@@ -15,12 +15,20 @@
 #define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
 #endif 
 // Lab4: You can use any other block size you wish.
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 512
 
 // Lab4: Host Helper Functions (allocate your own data structure...)
+bool isPowerTwo(int n) {
+  if(n==0) 
+    return false; 
+ 
+  return (ceil(log2((double) n)) == floor(log2((double) n))); 
+}
+
 
 
 // Lab4: Device Functions
+
 
 
 // Lab4: Kernel Functions
@@ -29,12 +37,13 @@
 // **===-------- Lab4: Modify the body of this function -----------===**
 // You may need to make multiple kernel calls, make your own kernel
 // function in this file, and then call them from here.
-__device__ void prescanArray(float *outArray, float *inArray, int numElements)
+__global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, int numElements, bool notPowerTwo)
 {
 
   extern __shared__ float temp[];
 
   int thid = threadIdx.x;
+  int blockId = blockIdx.x;
 
   int offset = 1;
 
@@ -73,10 +82,15 @@ __device__ void prescanArray(float *outArray, float *inArray, int numElements)
     offset *= 2;
   }
 
+  
+  
+
   /*
     block C
   */
   if (thid == 0) {
+    // 2. writing to sums array
+    sumsArray[blockId] = temp[numElements-1 + CONFLICT_FREE_OFFSET(numElements - 1)]
     temp[numElements-1 + CONFLICT_FREE_OFFSET(numElements - 1)] = 0;
   }
 
@@ -118,7 +132,80 @@ __device__ void prescanArray(float *outArray, float *inArray, int numElements)
 }
 // **===-----------------------------------------------------------===**
 
-__global__ void hostPrescanArray(float *outArray, float *inArray, int numElements){
-  prescanArray(outArray, inArray, numElements);
+ __host__ void hostPrescanArray(float *outArray, float *inArray, float *sumsArray, float *incArray, float *dumArray, int numElements){
+ // prescanArray(outArray, inArray, numElements);
+  /*
+    1. divide array into blocks to be scanned by a single thread block
+    2. write total sum into another array of block sums
+    3. scan block sums, generates array of block increments
+    4. go through outArray and increment the values as necessary
+  */
+
+/*
+  1. divide array into blocks
+*/
+
+  bool sums = false;
+  int numBlocks = 0;
+  int numThreads = BLOCK_SIZE/2;
+  bool notPowerTwo = false;
+
+  if (numElements < BLOCK_SIZE) {
+    numBlocks = 1;
+    notPowerTwo = true;
+  }
+  else if (numElements % BLOCK_SIZE == 0) {
+    // done
+    numBlocks = numElements/BLOCK_SIZE;
+  }
+  else {
+    numBlocks = (numElements/BLOCK_SIZE) + 1;
+    notPowerTwo = true;
+  }
+
+  /*
+    2. write total sum into sumArray (happens in prescan call)
+  */
+  dim3 threadPerBlock(numThreads);
+  dim3 blocks(numBlocks);
+  prescan<<<blocks,threadPerBlock>>>(outArray, inArray, sumsArray, numElements, notPowerTwo, sums);
+
+
+  /* 
+    3. scan block sums. generate incArray
+  */
+  
+  int numSums = numBlocks;
+  int numSumBlocks = 0;
+  int numThreads = BLOCK_SIZE/2;
+  bool notPowerTwo = false;
+  sums = true;
+
+  if (numSums < BLOCK_SIZE) {
+    numSumBlocks = 1;
+    notPowerTwo = true;
+  }
+  else if (numSums % BLOCK_SIZE == 0){
+    numSumBlocks = numSums / BLOCK_SIZE;
+  }
+  else {
+    numSumBlocks = (numSums / BLOCK_SIZE) + 1
+    notPowerTwo = true;
+  }
+
+  dim3 threadPerBlock(numThreads);
+  dim3 blocks(numSumBlocks);
+  prescan<<<blocks,threadPerBlock>>>(incArray, sumsArray, dumArray, numSums, notPowerTwo, sums);
+
+
+  /*
+    4. goes through out array and increments the values
+  */
+  for (int ii = 0; ii<numElements; ii++) {
+    outArray[ii] = outArray[ii] + incArray[(ii%BLOCK_SIZE)]
+  }
+
+
+
 }
 #endif // _PRESCAN_CU_
