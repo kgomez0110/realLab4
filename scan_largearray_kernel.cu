@@ -5,8 +5,8 @@
 #include <assert.h>
 
 
-#define NUM_BANKS 32
-#define LOG_NUM_BANKS 5
+#define NUM_BANKS 16
+#define LOG_NUM_BANKS 4
 
 #ifdef ZERO_BANK_CONFLICTS
 #define CONFLICT_FREE_OFFSET(n) \
@@ -38,22 +38,20 @@ int padCalculator(int n) {
 __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, int numElements, int padding, int numBlocks, bool sums)
 {
 
-  extern __shared__ float temp[];
+  __shared__ float temp[512+CONFLICT_FREE_OFFSET(512)];
 
   int thid = threadIdx.x + blockDim.x*blockIdx.x;
+  int threadId = threadIdx.x;
   int blockId = blockIdx.x;
 
   int offset = 1;
 
-  if (blockId == (numBlocks - 1)) {
-    if (padding) {
-      int index = 512 - padding;
-      for (int i = 0; i < padding; i++) {
-        temp[index] = 0;
-        index++;
-      }
+  if (threadId == 0) {
+    for (int i = 0; i < 512+CONFLICT_FREE_OFFSET(512); i++) {
+      temp[i] = 0;
     }
   }
+  __syncthreads();
 
   /*
     block A
@@ -64,15 +62,19 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
   int ai = thid; 
   int bi = thid + (numElements/2);
 
-  int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
-  int bankOffsetB = CONFLICT_FREE_OFFSET(ai);
+  int ai2 = threadId;
+  int bi2 = threadId + (numElements/2);
 
-  temp[ai + bankOffsetA] = inArray[ai];
-  temp[bi + bankOffsetB] = inArray[bi];
+  int bankOffsetA = CONFLICT_FREE_OFFSET(ai2);
+  int bankOffsetB = CONFLICT_FREE_OFFSET(bi2);
+
+
+  temp[ai2 + bankOffsetA] = inArray[ai];
+  temp[bi2 + bankOffsetB] = inArray[bi];
 
   for (int d = numElements>>1; d > 0; d >>= 1){
     __syncthreads();
-    if (thid < d) {
+    if (threadId < d) {
 
       /*
         block B
@@ -80,8 +82,8 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
       // int ai = offset*(2*thid+1) - 1;
       // int bi = offset*(2*thid+2) -1;
 
-      int ai = (offset*(2*thid+1)-1);
-      int bi = (offset*(2*thid+2)-1);
+      int ai = (offset*(2*threadId+1)-1);
+      int bi = (offset*(2*threadId+2)-1);
       ai += CONFLICT_FREE_OFFSET(ai);
       bi += CONFLICT_FREE_OFFSET(bi);
 
@@ -93,7 +95,7 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
   /*
     block C
   */
-  if (thid == 0 || thid%512 == 0) {
+  if (threadId == 0) {
     // 2. writing to sums array
     int last_element = (BLOCK_SIZE - 1 + BLOCK_SIZE*blockId);
     if (!sums){
@@ -106,7 +108,7 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
     offset >>= 1;
     __syncthreads();
 
-    if (thid < d) {
+    if (threadId < d) {
 
       /* 
         block d
@@ -114,8 +116,8 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
       // int ai = offset*(2*thid+1) - 1;
       // int bi = offset*(2*thid+2) -1;
 
-      int ai = (offset*(2*thid+1)-1);
-      int bi = (offset*(2*thid+2)-1);
+      int ai = (offset*(2*threadId+1)-1);
+      int bi = (offset*(2*threadId+2)-1);
       ai += CONFLICT_FREE_OFFSET(ai);
       bi += CONFLICT_FREE_OFFSET(bi);
       
@@ -127,14 +129,21 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
 
   __syncthreads();
 
-  /* 
-    block e
-  */
+  // /* 
+  //   block e
+  // */
 
   // g_odata[2*thid] = temp[2*thid];
   // g_odata[2*thid+1] = temp[2*thid+1];
-  outArray[ai] = temp[ai + bankOffsetA];
-  outArray[bi] = temp[bi + bankOffsetB];
+
+  int ai21 = (offset*(2*thid+1)-1);
+  ai21 += CONFLICT_FREE_OFFSET(ai21);
+  int bi21 = (offset*(2*thid+2)-1);
+  bi21 += CONFLICT_FREE_OFFSET(bi21);
+  printf("ai21: %d\n", ai21);
+  print("bi21: %d\n", bi21);
+  outArray[ai21] = temp[ai + bankOffsetA];
+  outArray[bi21] = temp[bi + bankOffsetB];
 
 
 }
@@ -145,7 +154,7 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
 
 // **===-----------------------------------------------------------===**
 
-__host__ void hostPrescanArray(float *outArray, float *inArray, int numElements){
+__host__ void hostPrescanArray(float *outArray, float *inArray, float *sumsArray, float *incArray, float *dumArray, int numElements){
  // prescanArray(outArray, inArray, numElements);
   /*
     1. divide array into blocks to be scanned by a single thread block
@@ -158,12 +167,14 @@ __host__ void hostPrescanArray(float *outArray, float *inArray, int numElements)
   1. divide array into blocks
 */
 
-printf("startPrescanArray");
-
   bool sums = false;
   int numBlocks = 0;
   int numThreads = BLOCK_SIZE/2;
+  printf("numElements: %d\n", numElements);
   int padding = padCalculator(numElements);
+  if (padding == 512)
+    padding = 0;
+  printf("padding: %d\n", padding);
 
   if (numElements < BLOCK_SIZE) {
     numBlocks = 1;
@@ -179,11 +190,10 @@ printf("startPrescanArray");
   /*
     2. write total sum into sumArray (happens in prescan call)
   */
-  printf("allocating sumsArray");
-  float sumsArray[numBlocks];
+  //float sumsArray[numBlocks];
   dim3 threadPerBlock(numThreads);
   dim3 blocks(numBlocks);
-  printf("first prescan call");
+
   prescanArray<<<blocks,threadPerBlock>>>(outArray, inArray, sumsArray, BLOCK_SIZE, padding, numBlocks, sums);
 
   // __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, int numElements, int padding, int numBlocks, bool sums)
@@ -207,17 +217,19 @@ printf("startPrescanArray");
     numSumBlocks = (numSums / BLOCK_SIZE) + 1;
   }
 
-  float incArray[numBlocks];
-  float dumm[0];
+  //float incArray[numBlocks];
+  //float dumArray[0];
   dim3 threadPerBlockSum(numThreads);
   dim3 blocksSum(numSumBlocks);
-  prescanArray<<<blocksSum,threadPerBlockSum>>>(incArray, sumsArray, dumm, numSums, sumsPadding, numSumBlocks, sums);
+  prescanArray<<<blocksSum,threadPerBlockSum>>>(incArray, sumsArray, dumArray, numSums, sumsPadding, numSumBlocks, sums);
 
 
   /*
     4. goes through out array and increments the values
   */
   for (int ii = 0; ii<numElements; ii++) {
+    printf("incArray: %d\n", incArray[0]);
+    printf("ii: %d\n", outArray[ii]);
     outArray[ii] = outArray[ii] + incArray[(ii%BLOCK_SIZE)];
   }
 
