@@ -176,11 +176,16 @@ runTest( int argc, char** argv)
     printf("\n\n**===-------------------------------------------------===**\n");
     printf("Processing %d elements...\n", num_elements);
     printf("Host CPU Processing time: %f (ms)\n", cutGetTimerValue(timer));
+    printf("dummy\n");
+    printf("dummy2\n");
+
     host_time = cutGetTimerValue(timer);
+    printf("after host time");
     CUT_SAFE_CALL(cutDeleteTimer(timer));
 
     // **===-------- Lab4: Allocate data structure here -----------===**
     // allocate device memory input and output arrays
+    printf("allocating memory");
     float* d_idata = NULL;
     float* d_odata = NULL;
 
@@ -196,16 +201,27 @@ runTest( int argc, char** argv)
 
     // Run just once to remove startup overhead for more accurate performance 
     // measurement
-    dim3 grid(16);
-    dim3 block(256); 
-    hostPrescanArray<<<grid, block>>>(d_odata, d_idata, 16);
+
+    //hostPrescanArray(float *outArray, float *inArray, float *sumsArray, float *incArray, float *dumArray, int numElements)
+    // float* d_inc = NULL;
+    // float* d_dum = NULL;
+    // float* d_sum = NULL;
+    // CUDA_SAFE_CALL( cudaMalloc( (void**) &d_inc, mem_size));
+    // CUDA_SAFE_CALL( cudaMalloc( (void**) &d_sum, mem_size));
+    // CUDA_SAFE_CALL( cudaMalloc( (void**) &d_dum, mem_size));
+
+    // CUDA_SAFE_CALL( cudaMemcpy( d_inc, h_data, mem_size, cudaMemcpyHostToDevice) );
+    // CUDA_SAFE_CALL( cudaMemcpy( d_dum, h_data, mem_size, cudaMemcpyHostToDevice) );
+    // CUDA_SAFE_CALL( cudaMemcpy( d_sum, h_data, mem_size, cudaMemcpyHostToDevice) );
+    printf("calling hostPrescanArray");
+    hostPrescanArray(d_odata, d_idata, 16);
 
     // Run the prescan
     CUT_SAFE_CALL(cutCreateTimer(&timer));
     cutStartTimer(timer);
     
     // **===-------- Lab4: Modify the body of this function -----------===**
-    hostPrescanArray<<<grid, block>>>(d_odata, d_idata, num_elements);
+    hostPrescanArray(d_odata, d_idata, num_elements);
     // **===-----------------------------------------------------------===**
     CUDA_SAFE_CALL( cudaThreadSynchronize() );
 
