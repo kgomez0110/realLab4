@@ -149,7 +149,7 @@
              // between 0 and 1000
              // Use DEFAULT_NUM_ELEMENTS num_elements
              //num_elements = DEFAULT_NUM_ELEMENTS;
-             num_elements = 1024;
+             num_elements = 513;
              
              // allocate host memory to store the input data
              mem_size = sizeof( float) * num_elements;
@@ -209,7 +209,7 @@
      CUDA_SAFE_CALL( cudaMemcpy( d_sum, h_data, mem_size, cudaMemcpyHostToDevice) );
      CUDA_SAFE_CALL( cudaMemcpy( d_inc, h_data, mem_size, cudaMemcpyHostToDevice) );
      CUDA_SAFE_CALL( cudaMemcpy( d_dum, h_data, mem_size, cudaMemcpyHostToDevice) );
-    // hostPrescanArray(d_odata, d_idata, d_sum, d_inc, d_dum, 16);
+    hostPrescanArray(d_odata, d_idata, d_sum, d_inc, d_dum, 16);
  
      // Run the prescan
      CUT_SAFE_CALL(cutCreateTimer(&timer));
@@ -246,13 +246,14 @@
  
      // Check if the result is equivalent to the expected soluion
      unsigned int result_regtest = cutComparef( reference, h_data, num_elements);
-    //  printf( "Test %s\n", (1 == result_regtest) ? "PASSED" : "FAILED");
+        
 
     // for (int ii = 0; ii<num_elements; ii++) {
     //     printf("h_data[%d]: %f\n", ii, h_data[ii]);
     //     printf("reference[%d]: %f\n", ii, reference[ii]);
 
     // }
+    printf( "Test %s\n", (1 == result_regtest) ? "PASSED" : "FAILED");
  
      // cleanup memory
      cutDeleteTimer(timer);

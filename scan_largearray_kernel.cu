@@ -31,7 +31,7 @@ int padCalculator(int n) {
 
 // Lab4: Device Functions
 
-__global__ void uniformAdd(float *outArray, float *incArray) {
+__global__ void uniformAdd(float *outArray, float *incArray, int numElements) {
   // for (int ii = 0; ii<numElements; ii++) {
   //   printf("ii: %d\n", outArray[ii]);
   //  // outArray[ii] = outArray[ii] + incArray[(ii%BLOCK_SIZE)];
@@ -40,21 +40,27 @@ __global__ void uniformAdd(float *outArray, float *incArray) {
   int idx = blockDim.x * blockIdx.x + threadIdx.x;
   // printf("outArray[0]: %f\n", outArray[0]);
   // printf("incArray[0]: %d\n", incArray[0]);
-  // printf("incArray[1]: %d\n", incArray[1]);
-
-  outArray[idx] = outArray[idx] + incArray[(idx/BLOCK_SIZE)];
+  //printf("idx: %d\n", idx);
+  // if (blockIdx.x == 1)
+  //   printf("incArray[%d]: %f\nidx: %d\noutArray[%d]: %f\n", (idx/BLOCK_SIZE), incArray[(idx/BLOCK_SIZE)], idx, idx, outArray[idx]);
+ // printf("idx/blocksize: %d\n", idx/BLOCK_SIZE);
+  // printf("outArray[1]: %f\n", outArray[2]);
+  if (idx < numElements)
+    outArray[idx] = outArray[idx] + incArray[(idx/BLOCK_SIZE)];
+  
 
   // printf("incArray[0]: %d\n", incArray[idx/BLOCK_SIZE]);
 }
 
 // Lab4: Kernel Functions
 
-__global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, int numElements, int padding, int numBlocks, bool sums)
+__global__ void prescanArray(float *outieArray, float *inArray, float *sumsArray, int numElements, int padding, int numBlocks, bool sums, int totalElements)
 {
 
   __shared__ float temp[512+CONFLICT_FREE_OFFSET(512)];
 
-  int thid = threadIdx.x + blockDim.x*blockIdx.x;
+  //int thid = threadIdx.x + blockDim.x*blockIdx.x;
+  //printf("blockDim.x: %d\n", blockDim.x);
   int threadId = threadIdx.x;
   int blockId = blockIdx.x;
 
@@ -73,8 +79,8 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
   // temp[2*thid] = g_idata[2*thid]; // lodd input into shared array
   // temp[2*thid+1] = g_idata[2*thid+1];
 
-  int ai = thid; 
-  int bi = thid + (numElements/2);
+  int ai = threadId + (blockId * BLOCK_SIZE); 
+  int bi = threadId + (blockId * BLOCK_SIZE) + (BLOCK_SIZE/2);
 
   int ai2 = threadId;
   int bi2 = threadId + (numElements/2);
@@ -82,9 +88,12 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
   int bankOffsetA = CONFLICT_FREE_OFFSET(ai2);
   int bankOffsetB = CONFLICT_FREE_OFFSET(bi2);
 
+  temp[ai2 + bankOffsetA] = (ai < totalElements) ? inArray[ai] : 0;
+  temp[bi2 + bankOffsetB] = (bi < totalElements) ? inArray[bi] : 0;
 
-  temp[ai2 + bankOffsetA] = inArray[ai];
-  temp[bi2 + bankOffsetB] = inArray[bi];
+  // if (threadId == 0 && blockId == 1) {
+  //   printf("513th value: %f\n", inArray[512]);
+  // }
 
   for (int d = numElements>>1; d > 0; d >>= 1){
     __syncthreads();
@@ -105,21 +114,26 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
     }
     offset *= 2;
   }
-
   /*
     block C
   */
   if (threadId == 0) {
     // 2. writing to sums array
+    
     // int last_element = (BLOCK_SIZE - 1) + (blockId * BLOCK_SIZE);
     int last_element = 511;
+    // if (sums) {
+    //   printf("numSumBlocks: %d\n", numBlocks);
+    //   printf("tempInc[0]: %f\n", temp[0 + CONFLICT_FREE_OFFSET(0)]);
+    //   printf("tempInc[1]: %f\n", temp[1 + CONFLICT_FREE_OFFSET(1)]);
+    //   printf("tempInc[3]: %f\n", temp[3 + CONFLICT_FREE_OFFSET(3)]);
+    // }
     if (!sums){
       sumsArray[blockId] = temp[last_element + CONFLICT_FREE_OFFSET(last_element)];
-      printf("sumsArray[%d]: %f\n", blockId, sumsArray[blockId]);
+      printf("sumsArray[%d]: %f\n\n", blockId, sumsArray[blockId]);
     }
     temp[last_element + CONFLICT_FREE_OFFSET(last_element)] = 0;
   }
-  __syncthreads();
   for (int d = 1; d<numElements; d*=2){
     offset >>= 1;
     __syncthreads();
@@ -143,7 +157,11 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
     }
   }
 
-  __syncthreads();
+  // if (sums) {
+  //   printf("tempInc[50]: %f\n", temp[50 + CONFLICT_FREE_OFFSET(50)]);
+  //   printf("tempInc[1]: %f\n", temp[1 + CONFLICT_FREE_OFFSET(1)]);
+  //   printf("tempInc[0]: %f\n", temp[0 + CONFLICT_FREE_OFFSET(0)]);
+  // }
   
 
   // /* 
@@ -153,13 +171,19 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
   // g_odata[2*thid] = temp[2*thid];
   // g_odata[2*thid+1] = temp[2*thid+1];
 
-  // int ai21 = (offset*(2*thid+1)-1);
-  // ai21 += CONFLICT_FREE_OFFSET(ai21);
-  // int bi21 = (offset*(2*thid+2)-1);
-  // bi21 += CONFLICT_FREE_OFFSET(bi21);
+  
+  outieArray[ai] = temp[ai2 + bankOffsetA];
+  
+  outieArray[bi] = temp[bi2 + bankOffsetB];
 
-  outArray[ai] = temp[ai2 + bankOffsetA];
-  outArray[bi] = temp[bi2 + bankOffsetB];
+  // if (ai == 1 && sums) {
+  //   printf("ai2 + bankoffsetA: %d\n", (ai2+bankOffsetA));
+  //   printf("temp[ai2 + bankoffsetA]: %f\n", temp[ai2 + bankOffsetA]);
+  //   printf("incArray[1] in prescan: %f\n", outieArray[0]);
+  //   printf("outArray[1] in prescan: %f\n", sumsArray[1]);
+
+  // }
+  
 
 
 
@@ -171,7 +195,7 @@ __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, 
 
 // **===-----------------------------------------------------------===**
 
-void hostPrescanArray(float *outArray, float *inArray, float *sumsArray, float *incArray, float *dumArray, int numElements){
+void hostPrescanArray(float *out, float *in, float *sumsA, float *inc, float *dumArray, int numElements){
  // prescanArray(outArray, inArray, numElements);
   /*
     1. divide array into blocks to be scanned by a single thread block
@@ -210,8 +234,8 @@ void hostPrescanArray(float *outArray, float *inArray, float *sumsArray, float *
   //float sumsArray[numBlocks];
   dim3 threadPerBlock(numThreads);
   dim3 blocks(numBlocks);
-  prescanArray<<<blocks,threadPerBlock>>>(outArray, inArray, sumsArray, BLOCK_SIZE, padding, numBlocks, sums);
-  cudaThreadSynchronize();
+  prescanArray<<<blocks,threadPerBlock>>>(out, in, sumsA, BLOCK_SIZE, padding, numBlocks, sums, numElements);
+  //cudaDeviceSynchronize();
 
   // __global__ void prescanArray(float *outArray, float *inArray, float *sumsArray, int numElements, int padding, int numBlocks, bool sums)
   /* 
@@ -223,6 +247,8 @@ void hostPrescanArray(float *outArray, float *inArray, float *sumsArray, float *
   numThreads = BLOCK_SIZE/2;
   sums = true;
   int sumsPadding = padCalculator(numSums);
+  printf("sumsPadding: %d\n", sumsPadding);
+  
 
   if (numSums < BLOCK_SIZE) {
     numSumBlocks = 1;
@@ -236,16 +262,18 @@ void hostPrescanArray(float *outArray, float *inArray, float *sumsArray, float *
   
   //float incArray[numBlocks];
   //float dumArray[0];
+  printf("numSums: %d\n", numSums);
   dim3 threadPerBlockSum(numThreads);
   dim3 blocksSum(numSumBlocks);
-  prescanArray<<<blocksSum,threadPerBlockSum>>>(incArray, sumsArray, dumArray, numSums, sumsPadding, numSumBlocks, sums);
+  prescanArray<<<blocksSum,threadPerBlockSum>>>(inc, sumsA, dumArray, BLOCK_SIZE, sumsPadding, numSumBlocks, sums, numSums);
 
-  cudaThreadSynchronize(); 
+  //cudaDeviceSynchronize(); 
   /*
     4. goes through out array and increments the values
   */
-  uniformAdd<<<numElements/512, 512>>>(outArray, incArray);
+  uniformAdd<<<(numElements/512)+1, 512>>>(out, inc, numElements);
 
+  //cudaThreadSynchronize();
 }
 
 
