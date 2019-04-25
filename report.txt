@@ -1,0 +1,47 @@
+EECS 368 Lab 4 Report
+
+Group Members:
+  Kenneth Gomez, kgu3753
+  Alex van der Heijden, adh9118
+  Alexis Baudron, abe3897
+
+1. Unfortunately we were unable to get our prefix scan to work on high multiples of 512 and
+and non multiples of 512, hence these tests we conducted on the highest achieved multiple it
+works on; 4096.
+
+Here are the results:
+Processing 4096 elements...
+Host CPU Processing time: 0.045000 (ms)
+CUDA Processing time: 0.104000 (ms)
+Speedup: 0.432692X
+Test PASSED
+
+2. When dealing with arrays that weren't powers of two, our strategy would be to pad them to 512
+(a power of two). The goal with this was to have all arrays be of size 512. To minimize shared memory
+bank conflicts, we also padded our shared memory; using the same algorithm to be able to access
+the elements in shared memory.
+
+3. For the GTX-680, it was given to us as 3090.432 GFLOPS per chip.
+
+Here's how we reached the calculation for the GPU chip:
+
+The CPU model is a Intel Xeon CPU E5-1620 with a clock rate of 3.60 GHz. The width in bits of the AVX
+we determined as being 4096 bits long. This is due to the fact that the Intel AVX contains 16 256-bit
+YMM registers. The CPU has 4 cores with 2 threads each (8 total).
+
+The calculation we determined was: 
+  #Operations/cycle/thread x threads/core x cores/chip x clock_Ghz = GFLOPS/chip
+
+Assuming 32-bit floating point operations, we find #Operations/cycle/thread as being 4096 / 32 = 128.
+
+Hence, GFLOPS/chip = 128*2*4*3.60 = 3,686.4
+
+Given an algorithm of O(N) on the CPU, the GFLOPS rate = 16777216*3,686.4 = 61,847,529,062.4.
+Given our algorithm of O(3N) on the GPU, the GFLOPS rate = 2*16777216*3090.432 = 103,697,690,394.624
+
+Thus we see the GFLOPS rate on the GPU as being almost twice as large as that on the CPU.
+
+The bottleneck for CPU is the speed of transferring data between itself and all the devices.
+
+The bottleneck for the GPU is the number of threads in a warp. A solution to this problem would be using an
+intra-warp algorithm as described in the Harris text.

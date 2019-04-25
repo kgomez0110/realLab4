@@ -46,7 +46,7 @@
  // includes, kernels
  #include <scan_largearray_kernel.cu>  
  
- #define DEFAULT_NUM_ELEMENTS 16000000 
+ #define DEFAULT_NUM_ELEMENTS 4096 
  #define MAX_RAND 3
  
  
@@ -149,7 +149,7 @@
              // between 0 and 1000
              // Use DEFAULT_NUM_ELEMENTS num_elements
              //num_elements = DEFAULT_NUM_ELEMENTS;
-            num_elements = 8192;
+            num_elements = 4096;
              
              // allocate host memory to store the input data
              mem_size = sizeof( float) * num_elements;

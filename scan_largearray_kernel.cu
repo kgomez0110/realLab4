@@ -254,7 +254,8 @@ void hostPrescanArray(float *out, float *in, int numElements){
   uniformAdd<<<(numElements/512)+1, 512>>>(out, incArray, temp_out, numElements);
   cudaFree(temp_out);
   cudaFree(sumsArray);
-  cudaFree(incArray);
+	cudaFree(incArray);
+
 }
 
 
