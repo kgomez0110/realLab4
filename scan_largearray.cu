@@ -149,7 +149,7 @@
              // between 0 and 1000
              // Use DEFAULT_NUM_ELEMENTS num_elements
              //num_elements = DEFAULT_NUM_ELEMENTS;
-             num_elements = 513;
+            num_elements = 8192;
              
              // allocate host memory to store the input data
              mem_size = sizeof( float) * num_elements;
@@ -185,16 +185,18 @@
      float* d_idata = NULL;
      float* d_odata = NULL;
      
-     float* d_sum = NULL;
-     float* d_inc = NULL;
-     float* d_dum = NULL;
+    //  float* d_sum = NULL;
+    //  float* d_inc = NULL;
+    //  float* d_dum = NULL;
 
      CUDA_SAFE_CALL( cudaMalloc( (void**) &d_idata, mem_size));
      CUDA_SAFE_CALL( cudaMalloc( (void**) &d_odata, mem_size));
 
-     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_sum, mem_size));
-     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_inc, mem_size));
-     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_dum, mem_size));
+    //  CUDA_SAFE_CALL( cudaMalloc( (void**) &d_dum, mem_size));
+    //  CUDA_SAFE_CALL( cudaMalloc( (void**) &d_sum, mem_size));
+    
+    //  CUDA_SAFE_CALL( cudaMalloc( (void**) &d_inc, mem_size));
+     
      
      // copy host memory to device input array
      CUDA_SAFE_CALL( cudaMemcpy( d_idata, h_data, mem_size, cudaMemcpyHostToDevice) );
@@ -206,17 +208,14 @@
      // Run just once to remove startup overhead for more accurate performance 
      // measurement
      
-     CUDA_SAFE_CALL( cudaMemcpy( d_sum, h_data, mem_size, cudaMemcpyHostToDevice) );
-     CUDA_SAFE_CALL( cudaMemcpy( d_inc, h_data, mem_size, cudaMemcpyHostToDevice) );
-     CUDA_SAFE_CALL( cudaMemcpy( d_dum, h_data, mem_size, cudaMemcpyHostToDevice) );
-    hostPrescanArray(d_odata, d_idata, d_sum, d_inc, d_dum, 16);
- 
+    hostPrescanArray(d_odata, d_idata, 16);
+    
      // Run the prescan
      CUT_SAFE_CALL(cutCreateTimer(&timer));
      cutStartTimer(timer);
      
+     hostPrescanArray(d_odata, d_idata, num_elements);
      // **===-------- Lab4: Modify the body of this function -----------===**
-     hostPrescanArray(d_odata, d_idata, d_sum, d_inc, d_dum, num_elements);
      // **===-----------------------------------------------------------===**
      CUDA_SAFE_CALL( cudaThreadSynchronize() );
  
@@ -261,9 +260,9 @@
      free( reference);
      cudaFree( d_odata);
      cudaFree( d_idata);
-     cudaFree( d_inc);
-     cudaFree( d_sum);
-     cudaFree( d_dum);
+    //  cudaFree( d_inc);
+    //  cudaFree( d_sum);
+    //  cudaFree( d_dum);
  }
  
  
